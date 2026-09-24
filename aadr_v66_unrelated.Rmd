@@ -1,0 +1,434 @@
+---
+title: "Human_graph"
+output: html_document
+date: "2026-09-17"
+---
+
+# Load libraries
+
+```{r, warning=FALSE, error=FALSE}
+
+setwd("~/Human_graph")
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(purrr)
+library(readxl)
+library(writexl)
+library(igraph)
+library(ggraph)
+library(visNetwork)
+```
+
+# Load and roughly filter the dataset
+
+```{r}
+# Select SNP filtering column based on dataset 
+
+```
+
+```{r, warning=FALSE}
+
+v66_p1_compatibility_HO_aadr_PUB_anno <- readxl::read_xlsx("aadr_v66_HOCompatibility_unfiltered.xlsx")
+
+# REMOVE DUPLICATES BY INDIVIDUAL ID COLUMN AND RETAIN THE ONE WITH MORE SNPs
+df_filt_nodupl <- v66_p1_compatibility_HO_aadr_PUB_anno %>% 
+  group_by(`Individual ID`) %>%
+  filter(`SNPs hit on autosomal targets (Computed using easystats on Compatibility_HO snpset)` == max(`SNPs hit on autosomal targets (Computed using easystats on Compatibility_HO snpset)`, na.rm = TRUE)) %>%
+  slice(1) %>%
+  ungroup() %>%
+  arrange(`Persistent Genetic ID`) 
+
+# FILTER FOR > 5000 SNPs
+# REMOVE CRITICAL INDIVIDUALS
+df_filtsnps_nodupl_noCRIT <- df_filt_nodupl %>% 
+  filter(
+    `SNPs hit on autosomal targets (Computed using easystats on Compatibility_HO snpset)`>= 5000,
+    !`Persistent Genetic ID` %in% c(27759,27760,28478),
+    !`ASSESSMENT` %in% c("CRITICAL", "MERGE_CRITICAL", "PROVISIONAL_CRITICAL")
+    )
+
+# STORE REMOVED INDIVIDUALS FOR LATER CHECK
+removed_ind <- df_filt_nodupl[
+    df_filt_nodupl$`SNPs hit on autosomal targets (Computed using easystats on Compatibility_HO snpset)`< 5000 |
+    df_filt_nodupl$`Persistent Genetic ID` %in% c(27759,27760,28478) |
+    df_filt_nodupl$`ASSESSMENT` %in% c("CRITICAL", "MERGE_CRITICAL", "PROVISIONAL_CRITICAL"),
+]
+  
+# REMOVE UNFILTERED TABLES
+rm(df_filt_nodupl)
+rm(v66_p1_compatibility_HO_aadr_PUB_anno)
+```
+
+Separate relatives from related\
+Individuals with no relatives **should** have NA, ".." or "" in the family relations column...
+
+```{r}
+
+# CHECK HOW MANY UNRELATED
+sum(is.na(df_filtsnps_nodupl_noCRIT$`Family relations`)) 
+table(df_filtsnps_nodupl_noCRIT[(nchar(df_filtsnps_nodupl_noCRIT$`Family relations`) <5), "Family relations"])
+# 172 NA and 19827 ".."
+
+unrelated_symbols <- c("", "..")
+
+# STORE "UNRELATED" SAMPLES
+unrelat_S <- df_filtsnps_nodupl_noCRIT %>%
+  filter(`Family relations` %in% unrelated_symbols | is.na(`Family relations`))
+
+# STORE "RELATED"
+related_noS <- df_filtsnps_nodupl_noCRIT %>%
+  filter(!(`Family relations` %in% unrelated_symbols | is.na(`Family relations`)))
+  
+```
+
+# Create relationship table (edges)
+
+```{r}
+
+edges <- related_noS %>%
+  select(`Individual ID`, `Family relations`) %>%
+  
+  # Split comma-separated relationships into separate rows
+  separate_rows(`Family relations`, sep = ",") %>%
+  
+  # Remove whitespace
+  mutate(`Family relations` = str_trim(`Family relations`)) %>%
+
+  # Extract the rel_deg
+  mutate(
+    rel_deg = as.numeric(
+      str_extract(`Family relations`, "\\d+(?:\\.\\d+)?(?=d)")
+    )
+  ) %>%
+  
+  # Extract the two individual IDs
+  mutate(
+    id1 = str_match(
+      `Family relations`,
+      "d.*?:([^:]+):([^,]+)"
+    )[, 2],
+    
+    id2 = str_match(
+      `Family relations`,
+      "d.*?:([^:]+):([^,]+)"
+    )[, 3]
+  ) %>%
+  
+  select(id1, id2, rel_deg)
+```
+
+## Quality check
+
+```{r}
+edges <- edges %>%
+  mutate(
+    id1 = str_trim(id1),
+    id2 = str_trim(id2)
+  ) %>%
+  filter(
+    !is.na(id1),
+    !is.na(id2),
+    id1 != "",
+    id2 != "",
+    !is.na(rel_deg)
+  )
+```
+
+## Add weights to relationships
+
+```{r}
+
+# rel_deg REFERS TO RELATIONSHIP
+edges$rel_deg <- as.numeric(edges$rel_deg)
+
+# ADDING WEIGHTS FOR RELATIONSHIP (customize it)
+edges <- edges %>%
+  mutate(weight = case_when(
+    rel_deg == 0.5 ~ 2,
+    rel_deg == 1 ~ 3,
+    rel_deg == 1.5 ~ 2.5,
+    rel_deg == 2 ~ 2,
+    rel_deg == 2.5 ~ 1.5,
+    rel_deg == 3 ~ 1,
+    TRUE ~ NA_real_
+  ))
+
+edges$weight <- as.numeric(edges$weight)
+
+```
+
+## Remove duplicated nodes (undirected graph)
+
+```{r}
+
+edges <- edges %>%
+  mutate(
+    from = pmin(id1, id2),
+    to   = pmax(id1, id2)
+  ) %>%
+  distinct(from, to, .keep_all = TRUE) %>%
+  select(-from, -to)
+
+```
+
+## Fix problems
+
+```{r}
+
+# STORE NODES NAMES
+nodes_names <- unique(c(edges$id1, edges$id2))
+
+# CREATE NODES
+nodes <- data.frame(
+  id = related_noS$`Individual ID`,
+  SNP = related_noS$`SNPs hit on autosomal targets (Computed using easystats on Compatibility_HO snpset)`,
+  stringsAsFactors = FALSE
+)
+
+length(unique(c(edges$id1,edges$id2))) # 3482
+length(unique(nodes$id)) # 3333
+
+# PROBLEM!
+# we have more nodes from the edges tables than expected...
+# some individuals from the "unrelated" group are mentioned in edges so they are related
+# let's fix this and put them in the right place
+
+unique(c(edges$id1[edges$id1 %in% unrelat_S$`Individual ID`],
+         edges$id2[edges$id2 %in% unrelat_S$`Individual ID`]))
+# 20 individuals from the unrelated
+
+edges_1 <- edges[((edges$id1 %in% nodes$id) & (edges$id2 %in% nodes$id)),]
+length(unique(c(edges_1$id1,edges_1$id2))) # 3262
+# REMOVING 220 NODES
+
+e1 <- unique(c(edges$id1, edges$id2)[!(c(edges$id1,edges$id2) %in% c(edges_1$id1,edges_1$id2))])
+sum(e1 %in% nodes$id)                     # 71 are present in the nodes
+sum(e1 %in% unrelat_S$`Individual ID`)    # 20 should have been unrelated but are not
+sum(e1 %in% removed_ind$`Individual ID`)  # 129 were removed from the initial filter
+
+# save them here, move them and redo filters and quality controls
+e2 <- e1[e1 %in% unrelat_S$`Individual ID`]
+
+# REMOVE FROM UNRELATED THE RELATED ONES
+unrelat_S <- unrelat_S[!unrelat_S$`Individual ID` %in% e2,] # removed from unrelated
+
+# ADD RELATED IN THRE RELATED DF
+related_noS <- rbind(related_noS, df_filtsnps_nodupl_noCRIT[df_filtsnps_nodupl_noCRIT$`Individual ID` %in% e2,])  
+
+# RECREATE NODES DF
+nodes <- data.frame(
+  id = related_noS$`Individual ID`,
+  SNP = related_noS$`SNPs hit on autosomal targets (Computed using easystats on Compatibility_HO snpset)`,
+  stringsAsFactors = FALSE)
+
+length(unique(c(edges$id1,edges$id2)))
+length(unique(c(edges_1$id1,edges_1$id2)))
+
+```
+
+## Reconstruct the edges
+
+```{r}
+
+edges_2 <- related_noS %>%
+  select(`Individual ID`, `Family relations`) %>%
+  
+  # Split comma-separated relationships into separate rows
+  separate_rows(`Family relations`, sep = ",") %>%
+  
+  # Remove whitespace
+  mutate(`Family relations` = str_trim(`Family relations`)) %>%
+
+  # Extract the rel_deg
+  mutate(
+    rel_deg = as.numeric(
+      str_extract(`Family relations`, "\\d+(?:\\.\\d+)?(?=d)")
+    )
+  ) %>%
+  
+  # Extract the two individual IDs
+  mutate(
+    id1 = str_match(
+      `Family relations`,
+      "d.*?:([^:]+):([^,]+)"
+    )[, 2],
+    
+    id2 = str_match(
+      `Family relations`,
+      "d.*?:([^:]+):([^,]+)"
+    )[, 3]
+  ) %>%
+  
+  select(id1, id2, rel_deg)
+
+
+# QUALITY CHECK
+# removing NA rows resulted from related individuals which have ".." or NA in family rel
+edges_2 <- edges_2 %>%
+  mutate(
+    id1 = str_trim(id1),
+    id2 = str_trim(id2)
+  ) %>%
+  filter(
+    !is.na(id1),
+    !is.na(id2),
+    id1 != "",
+    id2 != "",
+    !is.na(rel_deg)
+  )
+
+## add weights
+edges_2$rel_deg <- as.numeric(edges_2$rel_deg)
+edges_2 <- edges_2 %>%
+  mutate(weight = case_when(
+    rel_deg == 0.5 ~ 2,
+    rel_deg == 1 ~ 3,
+    rel_deg == 1.5 ~ 2.5,
+    rel_deg == 2 ~ 2,
+    rel_deg == 2.5 ~ 1.5,
+    rel_deg == 3 ~ 1,
+    TRUE ~ NA_real_
+  ))
+
+edges_2$weight <- as.numeric(edges_2$weight)
+
+
+# remove duplicated nodes (undirected graph)
+edges_2 <- edges_2 %>%
+  mutate(
+    from = pmin(id1, id2),
+    to   = pmax(id1, id2)
+  ) %>%
+  distinct(from, to, .keep_all = TRUE) %>%
+  select(-from, -to)
+
+# end of ploblem fix
+```
+
+# Check and filter some edges
+
+```{r}
+
+length(unique(c(edges_2$id1, edges_2$id2))) # 3482 vertices in edges
+nodes_names1 <- unique(nodes$id)            # 3353 vertices in nodes 
+
+# e4 = nodes in edges_2 that are not stored in nodes
+e3 <- unique(c(edges_2$id1, edges_2$id2))
+e4 <- setdiff(e3, nodes_names1)
+
+sum(e4 %in% removed_ind$`Individual ID`)
+# all the 129 nodes not present in nodes are already removed from the initial filtering
+```
+
+We have 3482 nodes in edges, 129 are in "removed_ind" (x), 3353 are fine (o)
+
+| ID1 | ID2 |                                                 |
+|-----|-----|-------------------------------------------------|
+| x   | x   | case (1): remove the edge, there should be none |
+| o   | o   | case (2): fine, keep                            |
+| o   | x   | case (3): remove edge                           |
+| x   | o   | case (4): remove edge                           |
+
+Filtering to keep only case 2, from case 3 and 4 we will still have the nodes stored
+
+```{r}
+edges_3 <- edges_2[
+  (edges_2$id1 %in% nodes_names1) &
+  (edges_2$id2 %in% nodes_names1),]            
+
+length(unique(c(edges_3$id1, edges_3$id2))) 
+# 3290 vertices with connections, 3353 total nodes
+```
+
+At this point we have:
+
+-   unrelated samples unrelated_S
+
+-   nodes that have family relationships
+
+-   nodes that have NO relationships (because the other sample has been filtered out)
+
+# Set selection
+
+Greedy approximation to select a large independent set.
+
+until there are edges in the graph; calculate the degree of each node and remove the one with highest degree. If multiple nodes share the maximum degree, delete the one with less SNPs. It deletes the vertex from the graph. When every remaining node has degree 0, it returns the remaining nodes.
+
+```{r}
+
+# GRAPH
+g <- graph_from_data_frame(
+  edges_3,
+  directed = FALSE,
+  vertices = nodes
+)
+```
+
+```{r}
+
+# ALGORITHM
+greedy_unrelated_set <- function(g) {
+  g_work <- g  # work on a copy so we don't touch the original graph
+  
+  while (ecount(g_work) > 0) {
+    degs <- degree(g_work)
+    max_deg <- max(degs)
+    tied <- names(degs)[degs == max_deg]
+    
+    if (length(tied) > 1) {
+      # among tied nodes, pick the one with the lowest SNP value
+      snp_vals <- V(g_work)[tied]$SNP
+      worst <- tied[which.min(snp_vals)]
+    } else {
+      worst <- tied
+    }
+    
+    g_work <- delete_vertices(g_work, worst)
+  }
+  
+  V(g_work)$name  # remaining nodes = largest unrelated set (greedy)
+}
+
+# test
+set.seed(123)
+unrelated_nodes <- greedy_unrelated_set(g)
+length(unrelated_nodes)
+head(unrelated_nodes)
+```
+
+```{r}
+# best_set <- c()
+# for (i in 1:100) {
+#   set.seed(i)
+#   candidate <- greedy_unrelated_set(g)
+#   if (length(candidate) > length(best_set)) best_set <- candidate
+# }
+
+best_set <- unrelated_nodes
+length(best_set)
+is_ivs(g, best_set)
+```
+
+# Store independent IDs
+
+```{r}
+ind_IDs <- c(best_set, unrelat_S$`Individual ID`)
+length(ind_IDs)
+
+
+final_ind <- df_filtsnps_nodupl_noCRIT[df_filtsnps_nodupl_noCRIT$`Individual ID` %in% ind_IDs,]  
+
+```
+
+# Filter based on political entity
+
+```{r}
+pol_ent_list <- unique(final_ind$`Political Entity`)
+pol_ent_list
+
+# Choose the desired political entities
+selected_pol_ent <- c("Italy", "Greece") 
+selecte_ind <- final_ind[final_ind$`Political Entity` %in% selected_pol_ent,]
+
+```
