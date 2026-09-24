@@ -16,4 +16,4 @@ or political entities for downstream population-genomic analyses.
 ## Dataset
 
 The starting dataset is available at:
-[aadr_v66_HOCompatibility_unfiltered.xlsx](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/FFIDCW)
+[The Allen Ancient DNA Resource (AADR): A curated compendium of ancient human genomes](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/FFIDCW)
