@@ -1,4 +1,4 @@
-# Ancient Human Genomics — AADR v66 HO Compatibility Dataset
+# Ancient Human Genomics - AADR v66 HO Compatibility Dataset
 
 This repository contains R code for processing and filtering ancient human genomic
 samples from the **Allen Ancient DNA Resource (AADR) v66** using the
@@ -15,5 +15,7 @@ or political entities for downstream population-genomic analyses.
 
 ## Dataset
 
-The starting dataset is available at:
+The dataset is available at:
 [The Allen Ancient DNA Resource (AADR): A curated compendium of ancient human genomes](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/FFIDCW)
+
+More info about the dataset is available at: [David Reich Lab Dataverse](https://dataverse.harvard.edu/file.xhtml?fileId=13994530&version=14.0)
