@@ -1,7 +1,5 @@
 ---
-title: "Human_graph"
-output: html_document
-date: "2026-09-17"
+title: "Human_aadr_v66"
 ---
 
 # Load libraries
@@ -22,19 +20,41 @@ library(visNetwork)
 
 # Load and roughly filter the dataset
 
-```{r}
-# Select SNP filtering column based on dataset 
+Change the code at "------------ CHANGE HERE ------------" with your table name.\
+Change the code at "------------ SELECT HERE ------------" selecting the corresponding table.
+
+```{r,warning=FALSE}
+
+# load table
+# ------------ CHANGE HERE ------------ 
+df0 <- readxl::read_xlsx("aadr_v66_HOCompatibility_unfiltered.xlsx")
+
+# Select SNP filtering column based on dataset
+
+v66.p1_2M.aadr.PUB.anno <- "SNPs hit on autosomal targets (Computed using easystats on enhance 2M capture subset)"
+
+v66.p1_2M_compatibility.aadr.PUB.anno <- "SNPs hit on autosomal targets (Computed using easystats on Compatibility snpset)"
+
+v66.p1_1240K.aadr.PUB.anno <- "SNPs hit on autosomal targets (Computed using easystats on 1240k snpset)"
+  
+v66.p1_compatibility_HO.aadr.PUB.anno <- "SNPs hit on autosomal targets (Computed using easystats on Compatibility_HO snpset)"
+  
+v66.p1_HO.aadr.PUB.anno <- "SNPs hit on autosomal targets (Computed using easystats on HO snpset)"
+
+# assign column name based on dataset
+# ------------ SELECT HERE ------------ 
+col_n <- v66.p1_compatibility_HO.aadr.PUB.anno
 
 ```
 
+\* samples 27759, 27760, 28478 are removed, they contain "IGNORE"
+
 ```{r, warning=FALSE}
 
-v66_p1_compatibility_HO_aadr_PUB_anno <- readxl::read_xlsx("aadr_v66_HOCompatibility_unfiltered.xlsx")
-
 # REMOVE DUPLICATES BY INDIVIDUAL ID COLUMN AND RETAIN THE ONE WITH MORE SNPs
-df_filt_nodupl <- v66_p1_compatibility_HO_aadr_PUB_anno %>% 
+df_filt_nodupl <- df0 %>% 
   group_by(`Individual ID`) %>%
-  filter(`SNPs hit on autosomal targets (Computed using easystats on Compatibility_HO snpset)` == max(`SNPs hit on autosomal targets (Computed using easystats on Compatibility_HO snpset)`, na.rm = TRUE)) %>%
+  filter(.data[[col_n]] == max(.data[[col_n]], na.rm = TRUE)) %>%
   slice(1) %>%
   ungroup() %>%
   arrange(`Persistent Genetic ID`) 
@@ -43,17 +63,18 @@ df_filt_nodupl <- v66_p1_compatibility_HO_aadr_PUB_anno %>%
 # REMOVE CRITICAL INDIVIDUALS
 df_filtsnps_nodupl_noCRIT <- df_filt_nodupl %>% 
   filter(
-    `SNPs hit on autosomal targets (Computed using easystats on Compatibility_HO snpset)`>= 5000,
-    !`Persistent Genetic ID` %in% c(27759,27760,28478),
+    .data[[col_n]] >= 5000,
+    !`Persistent Genetic ID` %in% c(27759,27760,28478), # *
     !`ASSESSMENT` %in% c("CRITICAL", "MERGE_CRITICAL", "PROVISIONAL_CRITICAL")
     )
 
 # STORE REMOVED INDIVIDUALS FOR LATER CHECK
-removed_ind <- df_filt_nodupl[
-    df_filt_nodupl$`SNPs hit on autosomal targets (Computed using easystats on Compatibility_HO snpset)`< 5000 |
-    df_filt_nodupl$`Persistent Genetic ID` %in% c(27759,27760,28478) |
-    df_filt_nodupl$`ASSESSMENT` %in% c("CRITICAL", "MERGE_CRITICAL", "PROVISIONAL_CRITICAL"),
-]
+removed_ind <- df_filt_nodupl %>% 
+  filter(
+    .data[[col_n]] < 5000 |
+    `Persistent Genetic ID` %in% c(27759,27760,28478) |
+    `ASSESSMENT` %in% c("CRITICAL", "MERGE_CRITICAL", "PROVISIONAL_CRITICAL"),
+)
   
 # REMOVE UNFILTERED TABLES
 rm(df_filt_nodupl)
@@ -135,7 +156,7 @@ edges <- edges %>%
   )
 ```
 
-## Add weights to relationships
+## Add weights to relationships (unnecessary)
 
 ```{r}
 
@@ -182,7 +203,7 @@ nodes_names <- unique(c(edges$id1, edges$id2))
 # CREATE NODES
 nodes <- data.frame(
   id = related_noS$`Individual ID`,
-  SNP = related_noS$`SNPs hit on autosomal targets (Computed using easystats on Compatibility_HO snpset)`,
+  SNP = related_noS[[col_n]],
   stringsAsFactors = FALSE
 )
 
@@ -219,7 +240,7 @@ related_noS <- rbind(related_noS, df_filtsnps_nodupl_noCRIT[df_filtsnps_nodupl_n
 # RECREATE NODES DF
 nodes <- data.frame(
   id = related_noS$`Individual ID`,
-  SNP = related_noS$`SNPs hit on autosomal targets (Computed using easystats on Compatibility_HO snpset)`,
+  SNP = related_noS[[col_n]],
   stringsAsFactors = FALSE)
 
 length(unique(c(edges$id1,edges$id2)))
@@ -412,6 +433,9 @@ is_ivs(g, best_set)
 
 # Store independent IDs
 
+Uncomment "------------ DOWNLOAD UNFILTERED TABLE HERE ------------" to download the unfiltered table of unrelated samples.\
+Uncomment "------------ DOWNLOAD UNFILTERED IDS HERE ------------" to download the unfiltered list of unrelated samples IDs.
+
 ```{r}
 ind_IDs <- c(best_set, unrelat_S$`Individual ID`)
 length(ind_IDs)
@@ -419,16 +443,40 @@ length(ind_IDs)
 
 final_ind <- df_filtsnps_nodupl_noCRIT[df_filtsnps_nodupl_noCRIT$`Individual ID` %in% ind_IDs,]  
 
+# ------------ DOWNLOAD UNFILTERED TABLE HERE ------------
+# write_xlsx(final_ind, path = "unfiltered_unrelated_table.xlsx")
+
+# ------------ DOWNLOAD UNFILTERED IDS HERE ------------ 
+# saving genetic IDs
+# write.table(final_ind$`Genetic ID (suffices: ".DG" is a high coverage shotgun genome with diploid genotype calls; ".SG" is a high coverage shotgun genome with diploid genotype calls; ".AG,  .TW, .BY, .AA, .EC, .WGC"  are Agilent 1240K or Twist Ancient DNA or "Big Yoruba" or "Archaic Admixture" or "Exome" or "Whole-Genome Capture" data respectively; each analyzed position is represented by a randomly chosen sequence allowing for combinations when merged (separable by readgroups if possible).  ".HO" is Affymetrix Human Origins genotype data and "REF" is reference haploid data.`,
+#             file = "unfiltered_genetic_ids.txt", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
 ```
 
 # Filter based on political entity
 
 ```{r}
-pol_ent_list <- unique(final_ind$`Political Entity`)
+pol_ent_list <- as.data.frame(sort(table(final_ind$`Political Entity`), decreasing = TRUE))
 pol_ent_list
 
+```
+
+Add the desired political entities at "------------ CHANGE HERE ------------"\
+Uncomment "------------ DOWNLOAD FILTERED TABLE HERE ------------" to download the filtered table of unrelated samples.\
+Uncomment "------------ DOWNLOAD FILTERED IDS HERE ------------" to download the filtered list of unrelated samples IDs.
+
+```{r}
 # Choose the desired political entities
+# ------------ CHANGE HERE ------------
 selected_pol_ent <- c("Italy", "Greece") 
 selecte_ind <- final_ind[final_ind$`Political Entity` %in% selected_pol_ent,]
+
+# ------------ DOWNLOAD FILTERED TABLE HERE ------------ 
+# write_xlsx(selected_ind, path = "filtered_unrelated_table.xlsx")
+
+# ------------ DOWNLOAD FILTERED IDS HERE ------------ 
+# saving genetic IDs
+# write.table(selected_ind$`Genetic ID (suffices: ".DG" is a high coverage shotgun genome with diploid genotype calls; ".SG" is a high coverage shotgun genome with diploid genotype calls; ".AG,  .TW, .BY, .AA, .EC, .WGC"  are Agilent 1240K or Twist Ancient DNA or "Big Yoruba" or "Archaic Admixture" or "Exome" or "Whole-Genome Capture" data respectively; each analyzed position is represented by a randomly chosen sequence allowing for combinations when merged (separable by readgroups if possible).  ".HO" is Affymetrix Human Origins genotype data and "REF" is reference haploid data.`,
+#             file = "unfiltered_genetic_ids.txt", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
 ```
