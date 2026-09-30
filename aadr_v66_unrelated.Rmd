@@ -6,7 +6,7 @@ title: "Human_aadr_v66"
 
 ```{r, warning=FALSE, error=FALSE}
 
-setwd("~/Human_graph")
+# setwd("~/path/to/folder")
 library(dplyr)
 library(tidyr)
 library(stringr)
