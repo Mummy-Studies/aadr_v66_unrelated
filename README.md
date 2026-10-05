@@ -19,3 +19,12 @@ The dataset is available at:
 [The Allen Ancient DNA Resource (AADR): A curated compendium of ancient human genomes](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/FFIDCW)
 
 More info about the dataset is available at: [David Reich Lab Dataverse](https://dataverse.harvard.edu/file.xhtml?fileId=13994530&version=14.0)
+
+---
+
+## Citation
+
+If this filtering workflow contributed to your data processing or sample selection, please cite the GitHub repository in the Methods section of your publication.
+
+Bello, K., Frigo S. Filtering aadr_v66_unrelated with a graph
+Available at: https://github.com/Mummy-Studies/aadr_v66_unrelated.git
