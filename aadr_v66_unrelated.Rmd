@@ -1,12 +1,17 @@
 ---
-title: "Human_aadr_v66"
+title: "Human_aadr_v66 filtering"
+authors: 
+  - Bello Ketty
+  - Frigo Silvia
+affiliation: Eurac research, Institute for Mummy Studies
+date: "2026-10-05"
+output: html_document
 ---
 
 # Load libraries
 
 ```{r, warning=FALSE, error=FALSE}
 
-# setwd("~/path/to/folder")
 library(dplyr)
 library(tidyr)
 library(stringr)
@@ -365,9 +370,7 @@ length(unique(c(edges_3$id1, edges_3$id2)))
 At this point we have:
 
 -   unrelated samples unrelated_S
-
 -   nodes that have family relationships
-
 -   nodes that have NO relationships (because the other sample has been filtered out)
 
 # Set selection
