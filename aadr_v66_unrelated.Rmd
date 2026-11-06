@@ -74,13 +74,14 @@ df_filt_nodupl_noCRIT <- df_filtsnps_noCRIT %>%
   arrange(`Persistent Genetic ID`) 
 
 
-# STORE REMOVED INDIVIDUALS FOR LATER CHECK
-removed_ind <- df_filt_nodupl_noCRIT %>% 
-  filter(
-    .data[[col_n]] < 5000 |
-    `Persistent Genetic ID` %in% c(27759,27760,28478) |
-    `ASSESSMENT` %in% c("CRITICAL", "MERGE_CRITICAL", "PROVISIONAL_CRITICAL"),
-)
+# STORE REMOVED INDIVIDUALS FOR LATER CHECK --> Ketty check it please
+removed_ind <- anti_join(df0, df_filt_nodupl_noCRIT, by ="Persistent Genetic ID")
+#removed_ind <- df_filt_nodupl_noCRIT %>% 
+#  filter(
+#    .data[[col_n]] < 5000 |
+#    `Persistent Genetic ID` %in% c(27759,27760,28478) |
+#    `ASSESSMENT` %in% c("CRITICAL", "MERGE_CRITICAL", "PROVISIONAL_CRITICAL"),
+#)
   
 # REMOVE UNFILTERED TABLES
 rm(df_filt_noCRIT)
