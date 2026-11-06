@@ -56,25 +56,26 @@ col_n <- v66.p1_compatibility_HO.aadr.PUB.anno
 
 ```{r, warning=FALSE}
 
-# REMOVE DUPLICATES BY INDIVIDUAL ID COLUMN AND RETAIN THE ONE WITH MORE SNPs
-df_filt_nodupl <- df0 %>% 
-  group_by(`Individual ID`) %>%
-  filter(.data[[col_n]] == max(.data[[col_n]], na.rm = TRUE)) %>%
-  slice(1) %>%
-  ungroup() %>%
-  arrange(`Persistent Genetic ID`) 
-
 # FILTER FOR > 5000 SNPs
 # REMOVE CRITICAL INDIVIDUALS
-df_filtsnps_nodupl_noCRIT <- df_filt_nodupl %>% 
+df_filtsnps_noCRIT <- df0 %>% 
   filter(
     .data[[col_n]] >= 5000,
     !`Persistent Genetic ID` %in% c(27759,27760,28478), # *
     !`ASSESSMENT` %in% c("CRITICAL", "MERGE_CRITICAL", "PROVISIONAL_CRITICAL")
     )
 
+# REMOVE DUPLICATES BY INDIVIDUAL ID COLUMN AND RETAIN THE ONE WITH MORE SNPs
+df_filt_nodupl_noCRIT <- df_filtsnps_noCRIT %>% 
+  group_by(`Individual ID`) %>%
+  filter(.data[[col_n]] == max(.data[[col_n]], na.rm = TRUE)) %>%
+  slice(1) %>%
+  ungroup() %>%
+  arrange(`Persistent Genetic ID`) 
+
+
 # STORE REMOVED INDIVIDUALS FOR LATER CHECK
-removed_ind <- df_filt_nodupl %>% 
+removed_ind <- df_filt_nodupl_noCRIT %>% 
   filter(
     .data[[col_n]] < 5000 |
     `Persistent Genetic ID` %in% c(27759,27760,28478) |
@@ -82,7 +83,7 @@ removed_ind <- df_filt_nodupl %>%
 )
   
 # REMOVE UNFILTERED TABLES
-rm(df_filt_nodupl)
+rm(df_filt_noCRIT)
 rm(v66_p1_compatibility_HO_aadr_PUB_anno)
 ```
 
