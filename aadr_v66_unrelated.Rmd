@@ -66,7 +66,7 @@ df_filtsnps_noCRIT <- df0 %>%
     )
 
 # REMOVE DUPLICATES BY INDIVIDUAL ID COLUMN AND RETAIN THE ONE WITH MORE SNPs
-df_filt_nodupl_noCRIT <- df_filtsnps_noCRIT %>% 
+df_filtsnps_nodupl_noCRIT <- df_filtsnps_noCRIT %>% 
   group_by(`Individual ID`) %>%
   filter(.data[[col_n]] == max(.data[[col_n]], na.rm = TRUE)) %>%
   slice(1) %>%
@@ -75,7 +75,7 @@ df_filt_nodupl_noCRIT <- df_filtsnps_noCRIT %>%
 
 
 # STORE REMOVED INDIVIDUALS FOR LATER CHECK --> Ketty check it please
-removed_ind <- anti_join(df0, df_filt_nodupl_noCRIT, by ="Persistent Genetic ID")
+removed_ind <- anti_join(df0, df_filtsnps_nodupl_noCRIT, by ="Persistent Genetic ID")
 #removed_ind <- df_filt_nodupl_noCRIT %>% 
 #  filter(
 #    .data[[col_n]] < 5000 |
@@ -84,7 +84,7 @@ removed_ind <- anti_join(df0, df_filt_nodupl_noCRIT, by ="Persistent Genetic ID"
 #)
   
 # REMOVE UNFILTERED TABLES
-rm(df_filt_noCRIT)
+rm(df_filtsnps_noCRIT)
 rm(v66_p1_compatibility_HO_aadr_PUB_anno)
 ```
 
